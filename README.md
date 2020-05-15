@@ -930,11 +930,11 @@ global:
   smtp_smarthost: 'smtp.163.com:25'
   smtp_from: 'colorsfly2011@163.com'
   smtp_auth_username: 'colorsfly2011@163.com'
-  smtp_auth_password: '128130110hero'
+  smtp_auth_password: ''
   smtp_require_tls: false
   wechat_api_corp_id: 'ww77882a466a969fe0'
   wechat_api_url: 'https://qyapi.weixin.qq.com/cgi-bin/'
-  wechat_api_secret: 'Mky0_Myh0pivMVHG1t17XUY0rPbfLfdf3Wc31qWOl7E'
+  wechat_api_secret: ''
 templates:
   - '/usr/local/alertmanager/template/wechat.tmpl'
 route:
@@ -949,7 +949,7 @@ receivers:
   - agent_id: 1000007
     corp_id: 'ww77882a466a969fe0'
     api_url: 'https://qyapi.weixin.qq.com/cgi-bin/'
-    api_secret: 'Mky0_Myh0pivMVHG1t17XUY0rPbfLfdf3Wc31qWOl7E'
+    api_secret: ''
     to_user: '@all'
     send_resolved: true
 ```
