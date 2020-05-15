@@ -78,7 +78,7 @@ systemctl restart docker.service
 ```
 docker ps
 ```
-![Image text](./mdimgs/docker_ps.png)
+![Image text](https://raw.githubusercontent.com/chenfei1990/k8s-deploy/master/mdimgs/docker_ps.png)
 # `K8s-etcd` 集群部署
 ## 1.使用cfssl来生成自签证书
 ```
