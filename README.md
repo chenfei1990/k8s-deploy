@@ -1,4 +1,4 @@
-# 访问地址 `https://github.com/chenfei1990/k8s-deploy`
+### 访问地址 `https://github.com/chenfei1990/k8s-deploy/blob/master/README.md`
 # `服务器准备操作`
 ## 1.设置root用户登陆
 > *root*用户登录
