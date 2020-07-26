@@ -63,7 +63,7 @@ dpkg -i docker-ce_18.06.1~ce~3-0~ubuntu_amd64.deb
     ],
     "live-restore":false,
     "insecure-registries":[
-        "registry:5777"
+        "minikube:5777"
     ]
 }
 ```
@@ -589,7 +589,7 @@ mkdir /opt/kubernetes/logs
 mkdir /opt/etcd
 
 scp -r /opt/kubernetes/ root@K8SMaster02:/opt/
-scp -r /opt/etcd/ssl/ root@K8SMaster02:/opt/etcd/
+scp -r /opt/etcd/ssl/ root@K8SMaster02:/opt/etcd/ssl/
 scp /usr/lib/systemd/system/kube-apiserver.service root@K8SMaster02:/usr/lib/systemd/system/kube-apiserver.service
 scp /usr/lib/systemd/system/kube-scheduler.service root@K8SMaster02:/usr/lib/systemd/system/kube-scheduler.service
 scp /usr/lib/systemd/system/kube-controller-manager.service root@K8SMaster02:/usr/lib/systemd/system/kube-controller-manager.service
@@ -605,7 +605,156 @@ systemctl enable kube-controller-manager
 systemctl restart kube-controller-manager
 kubectl get cs
 ```
+# `多master nginx 部署`
 
+> nginx安装
+
+```
+
+apt-get install -y  libpcre3 libpcre3-dev  zlib1g-dev  build-essential libssl-dev
+
+# yum install -y  gcc gcc-c++ make pcre pcre-devel zlib zlib-devel openssl openssl-devel
+
+tar -zxvf nginx-1.16.1.tar.gz
+
+useradd -M -s /sbin/nologin nginx
+
+cd nginx-1.16.1/
+
+./configure --prefix=/usr/local/nginx --with-http_stub_status_module --with-http_ssl_module --with-stream
+
+make && make install
+
+/usr/local/nginx/sbin/nginx  -V
+
+systemctl daemon-reload
+
+systemctl enable nginx
+
+systemctl start nginx
+
+```
+> `/lib/systemd/system/nginx.service`
+```
+[Unit]
+Description=nginx
+After=network.target
+
+[Service]
+Type=forking
+ExecStart=/usr/local/nginx/sbin/nginx
+ExecReload=/usr/local/nginx/sbin/nginx -s reload
+ExecStop=/usr/local/nginx/sbin/nginx -s quit
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
+```
+> 4层负载 在http外面加一个stream
+```nginx
+stream {
+   log_format  main  '$remote_addr $upstream_addr - [$time_local] $status $upstream_bytes_sent';
+    access_log  /var/log/nginx/k8s-access.log  main;
+
+    upstream k8s-apiserver {
+        server 192.168.56.11:6443;
+        server 192.168.56.14:6443;
+    }
+    server {
+                listen 8443;
+                proxy_pass k8s-apiserver;
+    }
+    }
+```
+> `keepalived`配置
+```
+apt-get install -y keepalived
+#主
+
+global_defs {
+    router_id LVS_MASTER
+}
+
+vrrp_script check_apiserver {
+    script "curl -o /dev/null -s -w %{http_code} -k  https://192.168.6.131:8443"
+    interval 3
+    timeout 3
+    fall 2
+    rise 2
+}
+
+vrrp_instance VI_1 {
+    state SLAVE
+    interface ens32
+    virtual_router_id 88
+    priority 50
+    advert_int 1
+    authentication {
+        auth_type PASS
+        auth_pass k8s
+    }
+    virtual_ipaddress {
+        192.168.6.129/24
+    }
+    track_script {
+        check_apiserver
+    }
+}
+
+
+#备
+
+global_defs {
+    router_id LVS_MASTER
+}
+
+vrrp_script check_apiserver {
+    script "curl -o /dev/null -s -w %{http_code} -k  https://192.168.6.130:8443"
+    interval 3
+    timeout 3
+    fall 2
+    rise 2
+}
+
+vrrp_instance VI_1 {
+    state MASTER
+    interface ens32
+    virtual_router_id 88
+    priority 100
+    advert_int 1
+    authentication {
+        auth_type PASS  
+        auth_pass k8s
+    }
+    virtual_ipaddress {
+        192.168.6.129/24
+    }
+    track_script {
+        check_apiserver
+    }
+}
+
+```
+
+> 重编译重安装`nginx`
+```
+./configure --prefix=/usr/local/nginx --with-http_stub_status_module --with-http_ssl_module --add-module=/ngm/ngx_http_substitutions_filter_module
+
+make
+
+ps -ef | grep nginx
+
+cp /usr/local/nginx/sbin/nginx /usr/local/nginx/sbin/nginx.bak
+
+kill -QUIT 31680
+
+cp ./objs/nginx /usr/local/nginx/sbin/
+
+/usr/local/nginx/sbin/nginx -V
+
+systemctl  start nginx
+
+```
 # `在Node节点部署组件`
 ## 1.将kubelet-bootstrap用户绑定到系统集群角色
 ```
@@ -765,7 +914,7 @@ docker load -i jenkins.tar
 docker load -i jenkins-slave.tar
 
 # 创建镜像仓库
- docker run -d -v /opt/registry:/var/lib/registry -p 5777:5000 --restart=always --name registry -e REGISTRY_STORAGE_DELETE_ENABLED=true registry
+ docker run -d -v /opt/minikube:/var/lib/registry -p 5777:5000 --restart=always --name registry -e REGISTRY_STORAGE_DELETE_ENABLED=true registry
 
 # 创建仓库浏览界面注意IP
 docker run -d   -p 8001:80   -e REGISTRY_HOST=10.3.24.67   -e REGISTRY_PORT=5777   -e REGISTRY_PROTOCOL=http   -e SSL_VERIFY=false   -e ALLOW_REGISTRY_LOGIN=true   -e REGISTRY_ALLOW_DELETE=true --restart=always  parabuzzle/craneoperator:latest
@@ -861,6 +1010,12 @@ dpkg -i  elasticsearch-7.4.0-amd64.deb  kibana-7.4.0-amd64.deb  logstash-7.4.0.d
 # `prometheus部署`
 ```
 
+docker load -i busyboxlatest.tar
+docker load -i configmap-reload.tar
+docker load -i prometheus.tar
+docker load -i addon-resizer.tar
+docker load -i kube-state-metrics.tar
+
 docker tag busybox:latest K8SMaster02:5777/library/busybox:latest
 docker push K8SMaster02:5777/library/busybox:latest
 
@@ -881,7 +1036,7 @@ kubectl apply -f prometheus-statefulset.yaml
 
  kubectl apply -f prometheus-service.yaml
 
-# 不动不了
+# 不动不了 centos填了会有问题
 
 fs.inotify.max_user_watches = 1048576
 vim /etc/sysctl.conf
@@ -899,6 +1054,27 @@ docker tag 192.168.6.131:5777/library/addon-resizer:1.8.5  K8SMaster02:5777/libr
 
 ```
 
+# `grafana`
+```
+
+docker tag grafana/grafana:latest registry:5777/library/grafana:latest
+
+docker push registry:5777/library/grafana:latest
+
+ tar -xvf granfana.tar
+
+ mkdir /opt/data/grafana
+
+ cp -ra grafana  /opt/data/grafana/
+
+ kubectl apply -f grafana.yaml 
+```
+
+# `node exporter`
+```
+通过脚本安装
+```
+
 # `altermanager`
 ```
 tar zxvf alertmanager-0.19.0.linux-amd64.tar.gz
@@ -906,8 +1082,16 @@ mv alertmanager-0.19.0.linux-amd64 /usr/local/alertmanager
 chown root:root -R /usr/local/alertmanager
 ```
 + 命令运行 windows  nssm 制作成 服务
+
 ```
-alertmanager.exe --config.file=D:\alertmanager\alertmanager.yml --storage.path=D:\alertmanager\data --log.level=info
+nssm.exe install altermanager
+
+nssm edit <servicename>
+
+nssm remove <servicename>
+
+
+ --config.file=E:\alertmanager\alertmanager.yml --storage.path=E:\alertmanager\data --log.level=info
 ```
 
 + /usr/lib/systemd/system/alertmanager.service
@@ -1026,13 +1210,19 @@ make && make install
 ln -s /usr/local/python3/bin/python3.7 /usr/bin/python3
 ln -s /usr/local/python3/bin/pip3 /usr/bin/pip3
 
+windows 直接安装 python 然后拷贝包含renquests的python文件 配置计划任务即可
+
 ```
 
 + master registry
 ```sh
 #!/bin/bash
-find /opt/kubernetes/logs -mtime +7  -exec rm -rf {} \;> /dev/null 2>&1
+find /opt/kubernetes/logs/ -mtime +7  -exec rm -rf {} \;> /dev/null 2>&1
 docker exec -it registry  registry garbage-collect /etc/docker/registry/config.yml > /dev/null 2>&1
+
+
+#重启crontab
+#service crond restart
 ```
 + python脚本清理  registry 
 ```python
@@ -1094,7 +1284,7 @@ python3 /root/pyscript/del_register.py > /dev/null 2>&1
 + node
 ```sh
 #!/bin/bash
-find /opt/kubernetes/logs -mtime +7  -exec rm -rf {} \;> /dev/null 2>&1
+find /opt/kubernetes/logs/ -mtime +7  -exec rm -rf {} \;> /dev/null 2>&1
 docker system prune -a -f --volumes > /dev/null 2>&1
 ```
 
@@ -1187,4 +1377,119 @@ cp -rf /etc/nginx /etc/nginx.back
 + 新编译 添加sub模块 --with-http_stub_status_module　--with-http_sub_module
 ```
 --prefix=/usr/share/nginx --sbin-path=/usr/sbin/nginx --modules-path=/usr/lib64/nginx/modules --conf-path=/etc/nginx/nginx.conf --error-log-path=/var/log/nginx/error.log --http-log-path=/var/log/nginx/access.log --http-client-body-temp-path=/var/lib/nginx/tmp/client_body --http-proxy-temp-path=/var/lib/nginx/tmp/proxy --http-fastcgi-temp-path=/var/lib/nginx/tmp/fastcgi --http-uwsgi-temp-path=/var/lib/nginx/tmp/uwsgi --http-scgi-temp-path=/var/lib/nginx/tmp/scgi --pid-path=/run/nginx.pid --lock-path=/run/lock/subsys/nginx --user=nginx --group=nginx --with-file-aio --with-ipv6 --with-http_ssl_module --with-http_v2_module --with-http_realip_module --with-stream_ssl_preread_module --with-http_addition_module --with-http_xslt_module=dynamic --with-http_image_filter_module=dynamic --with-http_sub_module --with-http_dav_module --with-http_flv_module --with-http_mp4_module --with-http_gunzip_module --with-http_gzip_static_module --with-http_random_index_module --with-http_secure_link_module --with-http_degradation_module --with-http_slice_module --with-http_stub_status_module --with-http_perl_module=dynamic --with-http_auth_request_module --with-mail=dynamic --with-mail_ssl_module --with-pcre --with-pcre-jit --with-stream=dynamic --with-stream_ssl_module --with-google_perftools_module --with-debug --with-cc-opt='-O2 -g -pipe -Wall -Wp,-D_FORTIFY_SOURCE=2 -fexceptions -fstack-protector-strong --param=ssp-buffer-size=4 -grecord-gcc-switches -specs=/usr/lib/rpm/redhat/redhat-hardened-cc1 -m64 -mtune=generic' --with-ld-opt='-Wl,-z,relro -specs=/usr/lib/rpm/redhat/redhat-hardened-ld -Wl,-E' --add-module=/git/ngx_http_substitutions_filter_module
+```
+
+# Too many open files
+
+> 设置文件最大打开数
++ vim /etc/sysctl.conf
++ 添加 fs.file-max = 1048576
++ sysctl -p
+
+> 用户
++ vim /etc/security/limits.conf
+
++ 添加
+```
+*               hard    nofile          1048576
+*               soft    nofile          1048576
+root            hard    nofile          1048576
+root            soft    nofile          1048576
+```
+> Systemd
+```
+sed -i '/DefaultLimitNOFILE/c DefaultLimitNOFILE=1048576' /etc/systemd/*.conf
+systemctl daemon-reexec
+```
+> 验证
+```
++ 打开新的终端
+ssh remote_user@host
+
+查看系统限制
+cat /proc/sys/fs/file-max
+
+查看用户硬限制
+ulimit -Hn
+
+查看用户软限制
+ulimit -Sn
+
+查看某进程的限制
+cat /proc/PID/limits # 将 PID 替换为具体的进程 ID
+
+
+修改 nginx.conf，
+添加：以下两点
+worker_rlimit_nofile 65535; # (has to be smaller or equal to LimitNOFILE set above)
+events {
+    worker_connections  65535;
+}
+重启 nginx:
+sudo systemctl restart nginx
+ 
+然后再去查看nginx的 max open files，看看是不是我们设置的65535
+grep 'open files' /proc/$( cat /var/run/nginx.pid )/limits
+到此就修改nginx的max open files结束。
+
+centos 修改 nginx.service加入
+
+LimitNOFILE=65536
+
+上面的 worker_rlimit_nofile 65535;  
+worker_connections  65535;  两个也要
+```
+
+
+# 大东方磁盘充满
+```
+#扩大 LVM 逻辑分区所在的物理分区
+parted /dev/vdb
+
+resizepart 1
+
+-0 
+
+q 
+
+
+lvresize -l +100%FREE /dev/datavg/datalv
+resize2fs -p /dev/mapper/datavg-datalv
+
+pvresize /dev/vdb1
+lvextend -L 490G /dev/mapper/datavg-datalv
+resize2fs -p /dev/mapper/datavg-datalv
+```
+
+# 解压缩mysql安装
+```
+tar -zxvf mysql-5.6.47-linux-glibc2.12-x86_64.tar.gz  -C /opt/
+
+cd /opt/
+mv mysql-5.6.47-linux-glibc2.12-x86_64/ mysql
+
+groupadd mysql
+
+useradd -g mysql mysql
+
+apt-get install libaio-dev
+
+ cd mysql/
+./scripts/mysql_install_db  --basedir=/opt/mysql --datadir=/opt/mysql/data
+
+vim my.cnf
+
+mkdir tmp
+chown -R mysql:mysql ./
+vim support-files/mysql.server      (改了基本目录)
+cp ./support-files/mysql.server  /etc/init.d/mysqld
+chmod +x /etc/init.d/mysqld
+
+
+apt-get install sysv-rc-conf
+sysv-rc-conf mysqld on
+systemctl daemon-reload 
+service mysql start
+apt-get install mysql-client-core-5.7
+
 ```
