@@ -883,6 +883,11 @@ systemctl restart kube-proxy
 ## 8.其他`node部署`，通过拷贝方式
 ```
 
+apt-get -y install ipvsadm
+apt-get -y install ipset
+apt-get -y install conntrack
+
+
 scp kubelet kube-proxy  root@192.168.77.12:/opt/kubernetes/bin
 scp pause.tar  root@192.168.77.12:/root/
 scp /opt/kubernetes/cfg/kubelet  root@192.168.77.12:/opt/kubernetes/cfg/kubelet
@@ -1314,6 +1319,89 @@ done
 rm $CURRENT_DIR/index_name.tmp
 ```
 # `mysql proxysql`
+```
+#安装
+dpkg -i proxysql_2.0.1-ubuntu16_amd64.deb
+apt-get install mysql-client-core-5.7
+
+systemctl  enable proxysql
+systemctl start proxysql
+
+#修改hostname admin1和admin2不同
+10.192.5.41    Mysql_Master
+192.168.78.14  Mysql_Salve
+
+#创建监控用户
+
+create user monitor@'%' identified by 'P@ssword1!';
+grant replication client on *.* to monitor@'%';
+flush privileges;
+
+
+#在proxysql节点运行 使用监控用户
+
+set mysql-monitor_username='monitor';
+set mysql-monitor_password='P@ssword1!';
+load mysql variables to runtime;
+save mysql variables to disk;
+
+#语句用户
+insert into mysql_users(username,password,default_hostgroup,max_connections) values('SYSTEM','alayadata666',1,4000);
+load mysql users to runtime; save mysql users to disk;
+
+#web监控
+SET admin-web_enabled='true';
+LOAD ADMIN VARIABLES TO RUNTIME;
+SAVE ADMIN VARIABLES TO DISK ;
+
+
+#插入主从复制语句
+insert into mysql_servers(hostgroup_id,hostname,port,weight,max_connections,comment,status) values(1,'Mysql_Master',33306,1,4000,'主','ONLINE');
+insert into mysql_servers(hostgroup_id,hostname,port,weight,max_connections,comment,status) values(1,'Mysql_Salve',3306,1,4000,'备','OFFLINE_SOFT');
+insert into mysql_servers(hostgroup_id,hostname,port,weight,max_connections,comment,status) values(2,'Mysql_Master',33306,2,4000,'主','ONLINE');
+insert into mysql_servers(hostgroup_id,hostname,port,weight,max_connections,comment,status) values(2,'Mysql_Salve',3306,8,4000,'备','OFFLINE_SOFT');
+
+load mysql servers to runtime;
+save mysql servers to disk;
+
+
+#主备切换脚本
+ scp sw_mode_checker.sh root@10.192.6.23:/var/lib/proxysql/
+chown proxysql:proxysql sw_mode_checker.sh
+
+insert into scheduler (id,interval_ms,filename,arg1,arg2,arg3,arg4,arg5) values (1,'5000','/var/lib/proxysql/sw_mode_checker.sh','1','2','1','0','/var/lib/proxysql/sw_mode_checker.log');
+
+SAVE SCHEDULER TO DISK;
+LOAD SCHEDULER TO RUNTIME;
+
+
+# 发邮件
+
+apt-get install heirloom-mailx
+
+vi /etc/s-nail.rc
+
+#末尾添加
+set from=colorsfly2011@163.com
+set smtp=smtps://smtp.163.com
+set smtp-auth-user=colorsfly2011@163.com
+set smtp-auth-password=128130110hero
+set smtp-auth=login
+
+
+
+select * from mysql_server_connect_log;
+
+select * from mysql_server_ping_log;
+
+
+# 加大openfile
+
+
+
+```
+
+
 ```sql
 insert into mysql_servers(hostgroup_id,hostname,port,weight,comment,status) values(1,'Mysql_Master',5306,1,'主','ONLINE'); 
 insert into mysql_servers(hostgroup_id,hostname,port,weight,comment,status) values(1,'Mysql_Salve',3320,1,'备','OFFLINE_SOFT'); 
@@ -1323,9 +1411,7 @@ insert into mysql_servers(hostgroup_id,hostname,port,weight,comment,status) v
 load mysql variables to runtime;
 save mysql variables to disk;
 
-select * from mysql_server_connect_log;
 
-select * from mysql_server_ping_log;
 ```
 
 # docker mysql
