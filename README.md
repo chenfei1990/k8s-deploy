@@ -1332,6 +1332,7 @@ systemctl start proxysql
 192.168.78.14  Mysql_Salve
 
 #创建监控用户
+mysql -uadmin -padmin -P6032 -h127.0.0.1 --prompt 'admin> '
 
 create user monitor@'%' identified by 'P@ssword1!';
 grant replication client on *.* to monitor@'%';
