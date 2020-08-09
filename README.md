@@ -1595,7 +1595,7 @@ scp /opt/kubernetes/bin/flanneld  /opt/kubernetes/bin/mk-docker-opts.sh   root@1
 scp /lib/systemd/system/docker.service root@192.168.78.15:/lib/systemd/system/docker.service
 scp /opt/kubernetes/cfg/flanneld root@192.168.78.15:/opt/kubernetes/cfg/flanneld
 scp /lib/systemd/system/flanneld.service root@192.168.78.15:/lib/systemd/system/flanneld.service
-scp -r /opt/etcd/ssl/ root@192.168.78.15:/opt/etcd/
+scp -r /opt/etcd/ssl/ root@192.168.78.15:/opt/etcd/ssl/
 
 
 systemctl daemon-reload
@@ -1609,7 +1609,7 @@ systemctl restart docker
 apt-get -y install ipvsadm
 apt-get -y install ipset
 apt-get -y install conntrack
-
+ mkdir /opt/kubernetes/logs
 
 scp kubelet kube-proxy  root@192.168.78.15:/opt/kubernetes/bin
 scp pause.tar  root@192.168.78.15:/root/
@@ -1620,6 +1620,8 @@ scp /opt/kubernetes/cfg/kube-proxy  root@192.168.78.15:/opt/kubernetes/cfg/kube-
 scp /lib/systemd/system/kube-proxy.service  root@192.168.78.15:/lib/systemd/system/kube-proxy.service
 scp bootstrap.kubeconfig kube-proxy.kubeconfig  root@192.168.78.15:/opt/kubernetes/cfg/
 # 修改 /opt/kubernetes/cfg/kubelet /opt/kubernetes/cfg/kubelet.config /opt/kubernetes/cfg/kube-proxy 中ip
+
+docker load -i pause.tar
 
 systemctl daemon-reload
 systemctl enable kubelet
