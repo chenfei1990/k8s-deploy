@@ -136,7 +136,7 @@ mv cfssl-certinfo_linux-amd64 /usr/local/bin/cfssl-certinfo
   "hosts": [
   "192.168.77.10",
   "192.168.77.11",
-  "192.168.77.12"
+  "192.168.78.15"
   ],
   "key": {
       "algo": "rsa",
@@ -174,7 +174,7 @@ ETCD_LISTEN_CLIENT_URLS="https://192.168.77.10:2379"
 #[Clustering]
 ETCD_INITIAL_ADVERTISE_PEER_URLS="https://192.168.77.10:2380"
 ETCD_ADVERTISE_CLIENT_URLS="https://192.168.77.10:2379"
-ETCD_INITIAL_CLUSTER="etcd01=https://192.168.77.10:2380,etcd02=https://192.168.77.11:2380,etcd03=https://192.168.77.12:2380"
+ETCD_INITIAL_CLUSTER="etcd01=https://192.168.77.10:2380,etcd02=https://192.168.77.11:2380,etcd03=https://192.168.78.15:2380"
 ETCD_INITIAL_CLUSTER_TOKEN="etcd-cluster"
 ETCD_INITIAL_CLUSTER_STATE="new"
 ```
@@ -203,10 +203,10 @@ cp ./tools/etcd-cert/{ca,server-key,server}.pem  /opt/etcd/ssl/
 ## 8.将 */opt/etcd/* 目录中所有文件以及 */lib/systemd/system/etcd.service* 文件拷贝另外机器上
 ```
 scp -r /opt/etcd/ root@192.168.77.11:/opt/
-scp -r /opt/etcd/ root@192.168.77.12:/opt/
+scp -r /opt/etcd/ root@192.168.78.15:/opt/
 
 scp /lib/systemd/system/etcd.service root@192.168.77.11:/lib/systemd/system/etcd.service
-scp /lib/systemd/system/etcd.service root@192.168.77.12:/lib/systemd/system/etcd.service
+scp /lib/systemd/system/etcd.service root@192.168.78.15:/lib/systemd/system/etcd.service
 ```
 ## 9.修改各个机器的 */opt/etcd/cfg/etcd* 中对应机器的ip; 启动etcd ,每个etcd机器都需要执行
 ```
@@ -218,7 +218,7 @@ systemctl start etcd
 ```
 /opt/etcd/bin/etcdctl \
 --ca-file=/opt/etcd/ssl/ca.pem --cert-file=/opt/etcd/ssl/server.pem --key-file=/opt/etcd/ssl/server-key.pem \
---endpoints="https://192.168.77.10:2379,https://192.168.77.11:2379,https://192.168.77.12:2379" \
+--endpoints="https://192.168.77.10:2379,https://192.168.77.11:2379,https://192.168.78.15:2379" \
 cluster-health
 ``` 
 ![Image text](./mdimgs/etcd_healthy.png)
@@ -283,7 +283,7 @@ systemctl start docker
 ```
 /opt/etcd/bin/etcdctl \
 --ca-file=/opt/etcd/ssl/ca.pem --cert-file=/opt/etcd/ssl/server.pem --key-file=/opt/etcd/ssl/server-key.pem \
---endpoints="https://192.168.77.10:2379,https://192.168.77.11:2379,https://192.168.77.12:2379" \
+--endpoints="https://192.168.77.10:2379,https://192.168.77.11:2379,https://192.168.78.15:2379" \
 set /coreos.com/network/config  '{ "Network": "172.17.0.0/16", "Backend": {"Type": "vxlan"}}'
 ```
 ## 2.安装flannel
@@ -294,7 +294,7 @@ mv flanneld mk-docker-opts.sh /opt/kubernetes/bin
 ```
 + flanneld配置文件 */opt/kubernetes/cfg/flanneld*
 ```sh
-FLANNEL_OPTIONS="--etcd-endpoints=https://192.168.77.10:2379,https://192.168.77.11:2379,https://192.168.77.12:2379 -etcd-cafile=/opt/etcd/ssl/ca.pem -etcd-certfile=/opt/etcd/ssl/server.pem -etcd-keyfile=/opt/etcd/ssl/server-key.pem"
+FLANNEL_OPTIONS="--etcd-endpoints=https://192.168.77.10:2379,https://192.168.77.11:2379,https://192.168.78.15:2379 -etcd-cafile=/opt/etcd/ssl/ca.pem -etcd-certfile=/opt/etcd/ssl/server.pem -etcd-keyfile=/opt/etcd/ssl/server-key.pem"
 ```
 + systemd管理Flannel配置文件 */lib/systemd/system/flanneld.service*
 ```sh
@@ -327,10 +327,10 @@ systemctl restart docker
 ```
 ## 3.拷贝至其他node节点
 ```
-scp /opt/kubernetes/bin/flanneld  /opt/kubernetes/bin/mk-docker-opts.sh   root@192.168.77.12:/opt/kubernetes/bin
-scp /usr/lib/systemd/system/docker.service root@192.168.77.12:/usr/lib/systemd/system/docker.service
-scp /opt/kubernetes/cfg/flanneld root@192.168.77.12:/opt/kubernetes/cfg/flanneld
-scp /usr/lib/systemd/system/flanneld.service root@192.168.77.12:/usr/lib/systemd/system/flanneld.service
+scp /opt/kubernetes/bin/flanneld  /opt/kubernetes/bin/mk-docker-opts.sh   root@192.168.78.15:/opt/kubernetes/bin
+scp /usr/lib/systemd/system/docker.service root@192.168.78.15:/usr/lib/systemd/system/docker.service
+scp /opt/kubernetes/cfg/flanneld root@192.168.78.15:/opt/kubernetes/cfg/flanneld
+scp /usr/lib/systemd/system/flanneld.service root@192.168.78.15:/usr/lib/systemd/system/flanneld.service
 systemctl daemon-reload
 systemctl enable flanneld
 systemctl restart flanneld
@@ -340,7 +340,7 @@ systemctl restart docker
 ```
 /opt/etcd/bin/etcdctl \
 --ca-file=/opt/etcd/ssl/ca.pem --cert-file=/opt/etcd/ssl/server.pem --key-file=/opt/etcd/ssl/server-key.pem \
---endpoints="https://192.168.77.10:2379,https://192.168.77.11:2379,https://192.168.77.12:2379" \
+--endpoints="https://192.168.77.10:2379,https://192.168.77.11:2379,https://192.168.78.15:2379" \
 ls /coreos.com/network/subnets
 ```
 ## 4.docker网络一定要互通 
@@ -471,7 +471,7 @@ e49457683ec34b3f9ff87090d3c6aafd,kubelet-bootstrap,10001,"system:kubelet-bootstr
 KUBE_APISERVER_OPTS="--logtostderr=false \
 --log-dir=/opt/kubernetes/logs \
 --v=4 \
---etcd-servers=https://192.168.77.10:2379,https://192.168.77.11:2379,https://192.168.77.12:2379 \
+--etcd-servers=https://192.168.77.10:2379,https://192.168.77.11:2379,https://192.168.78.15:2379 \
 --bind-address=192.168.77.10 \
 --secure-port=6443 \
 --advertise-address=192.168.77.10 \
@@ -776,7 +776,7 @@ kubectl get clusterrolebinding
 mkdir /opt/kubernetes/{bin,cfg,ssl} -p
 
 scp bootstrap.kubeconfig kube-proxy.kubeconfig  root@192.168.77.11:/opt/kubernetes/cfg/
-scp bootstrap.kubeconfig kube-proxy.kubeconfig  root@192.168.77.12:/opt/kubernetes/cfg/
+scp bootstrap.kubeconfig kube-proxy.kubeconfig  root@192.168.78.15:/opt/kubernetes/cfg/
 ```
 ## 3.部署`kubelet`组件
 > 创建kubelet配置文件：`/opt/kubernetes/cfg/kubelet`
@@ -888,13 +888,13 @@ apt-get -y install ipset
 apt-get -y install conntrack
 
 
-scp kubelet kube-proxy  root@192.168.77.12:/opt/kubernetes/bin
-scp pause.tar  root@192.168.77.12:/root/
-scp /opt/kubernetes/cfg/kubelet  root@192.168.77.12:/opt/kubernetes/cfg/kubelet
-scp /opt/kubernetes/cfg/kubelet.config  root@192.168.77.12:/opt/kubernetes/cfg/kubelet.config
-scp /lib/systemd/system/kubelet.service  root@192.168.77.12:/lib/systemd/system/kubelet.service
-scp /opt/kubernetes/cfg/kube-proxy  root@192.168.77.12:/opt/kubernetes/cfg/kube-proxy
-scp /lib/systemd/system/kube-proxy.service  root@192.168.77.12:/lib/systemd/system/kube-proxy.service
+scp kubelet kube-proxy  root@192.168.78.15:/opt/kubernetes/bin
+scp pause.tar  root@192.168.78.15:/root/
+scp /opt/kubernetes/cfg/kubelet  root@192.168.78.15:/opt/kubernetes/cfg/kubelet
+scp /opt/kubernetes/cfg/kubelet.config  root@192.168.78.15:/opt/kubernetes/cfg/kubelet.config
+scp /lib/systemd/system/kubelet.service  root@192.168.78.15:/lib/systemd/system/kubelet.service
+scp /opt/kubernetes/cfg/kube-proxy  root@192.168.78.15:/opt/kubernetes/cfg/kube-proxy
+scp /lib/systemd/system/kube-proxy.service  root@192.168.78.15:/lib/systemd/system/kube-proxy.service
 
 # 修改 /opt/kubernetes/cfg/kubelet /opt/kubernetes/cfg/kubelet.config /opt/kubernetes/cfg/kube-proxy 中ip
 
@@ -1544,7 +1544,7 @@ lvresize -l +100%FREE /dev/datavg/datalv
 resize2fs -p /dev/mapper/datavg-datalv
 
 pvresize /dev/vdb1
-lvextend -L 490G /dev/mapper/datavg-datalv
+lvextend -l 100%VG /dev/mapper/datavg-datalv
 resize2fs -p /dev/mapper/datavg-datalv
 ```
 
@@ -1579,4 +1579,57 @@ systemctl daemon-reload
 service mysql start
 apt-get install mysql-client-core-5.7
 
+```
+
+
+# 添加新节点
+```
+# 充满磁盘
+# 时间同步
+# 设置主机名称
+# 修改docker 配置文件
+# 安装flannel
+mkdir /opt/kubernetes/{cfg,bin,ssl} -p  
+
+scp /opt/kubernetes/bin/flanneld  /opt/kubernetes/bin/mk-docker-opts.sh   root@192.168.78.15:/opt/kubernetes/bin
+scp /lib/systemd/system/docker.service root@192.168.78.15:/lib/systemd/system/docker.service
+scp /opt/kubernetes/cfg/flanneld root@192.168.78.15:/opt/kubernetes/cfg/flanneld
+scp /lib/systemd/system/flanneld.service root@192.168.78.15:/lib/systemd/system/flanneld.service
+scp -r /opt/etcd/ssl/ root@192.168.78.15:/opt/etcd/
+
+
+systemctl daemon-reload
+systemctl enable flanneld
+systemctl restart flanneld
+systemctl restart docker
+
+
+
+
+apt-get -y install ipvsadm
+apt-get -y install ipset
+apt-get -y install conntrack
+
+
+scp kubelet kube-proxy  root@192.168.78.15:/opt/kubernetes/bin
+scp pause.tar  root@192.168.78.15:/root/
+scp /opt/kubernetes/cfg/kubelet  root@192.168.78.15:/opt/kubernetes/cfg/kubelet
+scp /opt/kubernetes/cfg/kubelet.config  root@192.168.78.15:/opt/kubernetes/cfg/kubelet.config
+scp /lib/systemd/system/kubelet.service  root@192.168.78.15:/lib/systemd/system/kubelet.service
+scp /opt/kubernetes/cfg/kube-proxy  root@192.168.78.15:/opt/kubernetes/cfg/kube-proxy
+scp /lib/systemd/system/kube-proxy.service  root@192.168.78.15:/lib/systemd/system/kube-proxy.service
+scp bootstrap.kubeconfig kube-proxy.kubeconfig  root@192.168.78.15:/opt/kubernetes/cfg/
+# 修改 /opt/kubernetes/cfg/kubelet /opt/kubernetes/cfg/kubelet.config /opt/kubernetes/cfg/kube-proxy 中ip
+
+systemctl daemon-reload
+systemctl enable kubelet
+systemctl restart kubelet
+# 批准加入
+kubectl get csr
+kubectl certificate approve XXXXID
+kubectl get node
+systemctl enable kube-proxy
+systemctl restart kube-proxy
+
+# 增加打开文件数量
 ```
